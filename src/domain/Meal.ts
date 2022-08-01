@@ -1,15 +1,15 @@
 import * as t from 'io-ts';
-import { nonEmptyArray } from 'io-ts-types';
+import { nonEmptyArray, NonEmptyString } from 'io-ts-types';
 import { Customer } from './Customer';
 import { OrderItem } from './OrderItem';
 
-export const Order = t.intersection([
+export const Meal = t.intersection([
   t.type({
     customer: Customer,
     items: nonEmptyArray(OrderItem),
   }),
   t.partial({
-    note: t.string,
+    note: NonEmptyString,
   })
 ]);
-export type Order = t.TypeOf<typeof Order>;
+export type Meal = t.TypeOf<typeof Meal>;

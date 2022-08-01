@@ -4,16 +4,24 @@ This app is going to be a meal quotation enginene API. The user is going to prov
 
 ## Let's define a meal
 
-We are going to define a DTO to handle incoming data. The DTO will be strongly typed and verified with [io-ts](https://github.com/gcanti/io-ts). So let's start by adding it to our dependencies: `docker-compose run --rm node yarn add io-ts fp-ts` (fp-ts is peer dependency of io-ts).
+We are going to define a DTO to handle incoming data. The DTO will be strongly typed and verified with [io-ts](https://github.com/gcanti/io-ts). We're going to use many different package derived from the work of [Giulio Canti](https://github.com/gcanti), namely:
 
-In his initial rappresentation, a meal has a customer, order and notes. Our API is going to accept the following data:
+- [io-ts](https://github.com/gcanti/io-ts): a runtime type system for decodin/encoding data
+- [fp-ts](https://github.com/gcanti/fp-ts): functional programming for Typescript
+- [newtype-ts](https://github.com/gcanti/newtype-ts): a libriry that let's you define a new type from an existing one
+- [io-ts-types](https://github.com/gcanti/io-ts-types): a collection of codecs and combinators for use with io-ts
+- [monocle-ts](https://github.com/gcanti/monocle-ts): a partial porting of [Scala monocle](https://github.com/optics-dev/Monocle) needed by the previous types extensions
+
+So let's start by adding it to our dependencies: `docker-compose run --rm node yarn add io-ts fp-ts newtype-ts io-ts-types monocle-ts`.
+
+In his initial rappresentation, a meal has a customer, an order and a note. Our API is going to accept the following data:
 
 ```json
 {
   "customer": {
     "name": "Jack",
   },
-  "order": [
+  "items": [
     {
       "food": "banana",
       "quantity": 2,
@@ -37,52 +45,121 @@ We'll require some validation:
 - "customer.name" is a string, is required and must be at least of two characters
 - note, if present, must be a string
 
-Let's see how we can do that. Here's an initial definition of an (OrderItem)[../src/dto/OrderItem.ts]:
+We'll split our types in two side: dto and domain. DTOs, Data Transfer Object, will rappresent the outside, untrusted world. While domain are out internal, protected and affordable business logic.
+
+Since we don't like, at least I don't, to repeat ourselves we create a [BaseOrderItem](../src/domain/BaseOrderItem.ts) which will handle a basic definition of an item in the order array:
 
 ```ts
 import * as t from 'io-ts';
 
-export const OrderItem = t.type({
+export const BaseOrderItem = t.type({
   food: t.union([t.literal('banana'), t.literal('pie'), t.literal('carrot')]),
   quantity: t.number,
 });
+export type BaseOrderItem = t.TypeOf<typeof BaseOrderItem>;
+```
+
+As you can see, we already have a check on the allowed food but we still don't have any control over the `quantity`.
+
+This BaseOrderItem type, is then copied from the [OrderItemDto](../src/dto/OrderItemDto.ts):
+
+```ts
+import * as t from 'io-ts';
+import { BaseOrderItem } from '../domain/BaseOrderItem';
+
+export const OrderItemDto = BaseOrderItem;
+export type OrderItemDto = t.TypeOf<typeof OrderItemDto>;
+```
+
+Last but not least, we define our domain rappresentation of an [OrderItem](../src/domain/OrderItem.ts). We'll use a specil type, a [branded type](https://github.com/gcanti/io-ts/blob/master/index.md#branded-types--refinements), to define positive integers:
+
+```ts
+import * as t from 'io-ts';
+import { PositiveInteger } from './utils/PositiveInteger';
+import { BaseOrderItem } from './BaseOrderItem';
+
+export const OrderItem = t.intersection([
+  BaseOrderItem,
+  t.type ({ quantity: PositiveInteger}),
+]);
 export type OrderItem = t.TypeOf<typeof OrderItem>;
 ```
 
-An order item is define by a `food`, wich can only be the string banana or pie or carrot, and quantity which must be a number. Using io-ts we'll have a type check right on our IDE. If you try to create an order item with the wrong food, your IDE will tell you...you're doing it wrong!
-
-```ts
-const testOrderItem: OrderItem = {
-  food: 'apple', // Type apple is not assignable to type '"banana" | "pie" | "carrot"'
-  quantity: -1,
-}
-```
-
-Obviously quantity should throw some error too: we're required to have a positive quantity. Let's introduce [branded types](https://github.com/gcanti/io-ts/blob/master/index.md#branded-types--refinements).
-
-We can copy/paste the example provided in io-ts. We create a new file in `utils` folder and call it PositiveNumber.ts. Here's the code:
+So an OrderItem, in our domain, is a BaseOrderItem where `quantity` is a positive integer. We'll prove this in the next chapter, where we'll start testing our code. Now we can show how it looks like this branded type:
 
 ```ts
 import * as t from 'io-ts';
 
-interface PositiveBrand {
-  readonly Positive: unique symbol;
+interface PositiveIntegerBrand {
+  readonly PositiveInteger: unique symbol
 }
 
-export const Positive = t.brand(
-  t.number,
-  (n): n is t.Branded<number, PositiveBrand> => 0 < n,
-  'Positive'
+export const PositiveInteger = t.brand(
+  t.Int,
+  (n: t.Int): n is t.Branded<t.Int, PositiveIntegerBrand> => n >= 0,
+  'PositiveInteger'
 )
 
-type Positive = t.TypeOf<typeof Positive>
+type PositiveInteger = t.TypeOf<typeof PositiveInteger>
 ```
 
-We update order and force quantiti to be `Positive': `quantity: Positive,`.
+A branded type has a codec (we'll explain this later), a refinement function and a name. Basically we are sayng that a PositiveInteger is an `Int` codec but it is only valid id the number is greater than 0 (`n >= 0`).
+
+`Customer` is quite easy. We'll duplicate it in domain and DTO. In domain we'll use the `NonEmptyString` type from `io-ts-types`. In this case, I prefere to duplicate in order to have a clear separation between the meening of o Customer in our domain and that in the outside world.
+
+We can now define a [Meal](../src/domain/Meal.ts):
 
 ```ts
-const testOrderItem: OrderItem = {
-  food: 'banana',
-  quantity: -1, //
-}
+import * as t from 'io-ts';
+import { nonEmptyArray, NonEmptyString } from 'io-ts-types';
+import { Customer } from './Customer';
+import { OrderItem } from './OrderItem';
+
+export const Meal = t.intersection([
+  t.type({
+    customer: Customer,
+    items: nonEmptyArray(OrderItem),
+  }),
+  t.partial({
+    note: NonEmptyString,
+  })
+]);
+export type Meal = t.TypeOf<typeof Meal>;
 ```
+
+Here we use an `intersaction` with a `partial`: so we define an optional field. We also use another element from `io-ts-types`: a non empty array which should be self explanatory.
+
+The DTO, will be similar but with less checks:
+
+...
+
+Now let's use everything and see how they works:
+
+```ts
+// index.ts
+app.post('/meal', (req, res) => {
+  const data = Meal.decode(req.body);
+  if (data._tag === 'Left') {
+    res.status(400).send('Invalid Meal');
+  } else {
+    res.send('Meal accepted');
+  }
+});
+```
+
+We've defined a new route `/meal` and we use the Meal codec to validate our data. A `codec` returns either a `Left` or a `Right` tagged type. By convention, if the type is Left, something bad has happened. If it is Rigth, everythin is ok.
+
+You can try this sending somw wrong data:
+
+```bash
+curl --location --request POST 'http://localhost:3000/meal' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "hy": "bye"
+}'
+```
+
+Response will be `Invalid meal`. You can try with a valid meal and see what happen.
+
+See you in next chapter to start testing.
+

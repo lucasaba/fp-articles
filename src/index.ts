@@ -1,18 +1,21 @@
 import express from 'express';
+import { Meal } from './domain/Meal';
 import { OrderItem } from './domain/OrderItem';
 
 const app = express();
+app.use(express.json()) 
 const port = 3000;
 
 app.get('/', (req, res) => {
-  const test = OrderItem.decode({
-    food: 'pie',
-    quantity: 11,
-  });
-  if (test._tag === 'Left') {
-    res.status(400).send('Left');
+  res.send('Hallo World! How do you feel ?');
+});
+
+app.post('/meal', (req, res) => {
+  const data = Meal.decode(req.body);
+  if (data._tag === 'Left') {
+    res.status(400).send('Invalid Meal');
   } else {
-    res.send('Right');
+    res.send('Meal accepted');
   }
 });
 
