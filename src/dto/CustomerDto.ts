@@ -1,6 +1,7 @@
 import * as t from 'io-ts';
 
 export const CustomerDto = t.type({
-  name: t.string,
+  username: t.string,
+  password: t.string,
 });
 export type CustomerDto = t.TypeOf<typeof CustomerDto>;

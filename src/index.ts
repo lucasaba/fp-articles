@@ -1,9 +1,9 @@
 import express from 'express';
-import { Meal } from './domain/Meal';
-import { OrderItem } from './domain/OrderItem';
+import { MealDto } from './dto/MealDto';
+import { getUserByUsernameAndPassword } from './infra/user.repository';
 
 const app = express();
-app.use(express.json()) 
+app.use(express.json())
 const port = 3000;
 
 app.get('/', (req, res) => {
@@ -11,12 +11,24 @@ app.get('/', (req, res) => {
 });
 
 app.post('/meal', (req, res) => {
-  const data = Meal.decode(req.body);
+  const data = MealDto.decode(req.body);
+
   if (data._tag === 'Left') {
     res.status(400).send('Invalid Meal');
-  } else {
-    res.send('Meal accepted');
+    return;
   }
+
+  const user = getUserByUsernameAndPassword(
+    data.right.customer.username,
+    data.right.customer.password,
+  );
+
+  if (user._tag === 'None') {
+    res.status(403).send('Unauthorized');
+    return;
+  }
+
+  res.send('Meal accepted');
 });
 
 app.listen(port, () => {
