@@ -114,3 +114,33 @@ Firs of all, as suggested in [the official documentation](https://jestjs.io/docs
 ```
 
 Now we can start testing the app. We add a test for the `/` route in [app.root.spec.ts](../src/__test__/app.root.spec.ts).
+
+```ts
+import { app } from "../app";
+import request from "supertest";
+
+describe("Test the root path", () => {
+  test("It should response the GET method", async () => {
+    const response = await request(app).get("/");
+    expect(response.statusCode).toBe(200);
+    expect(response.body.message).toBe('Hello World! How do you feel ?');
+  });
+});
+```
+
+Test for the `/meal` root are a little bit longer. You can see them in [__test__/app.meal.spec.ts](../src/__test__/app.meal.spec.ts) file.
+
+We test that:
+
+- is correctly returned a 403 when customer is not recognized
+- is correctly returned 400 when:
+-- customer ha no or empty password
+-- no item in order
+-- wrong item in order
+-- note is empty
+
+Now we can start to refactor.
+
+## Refactoring
+
+
