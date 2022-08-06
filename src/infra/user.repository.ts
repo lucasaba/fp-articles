@@ -11,21 +11,21 @@ const rawUsers = [
   }
 ];
 
-export const getUsers: User[] = pipe(
-  rawUsers,
+export const getUsers = (data: any[]): User[] => pipe(
+  data,
   A.map(user => User.decode(user)),
   A.separate,
   (t) => t.right
 );
 
-export const getUserById = (id: string) => pipe(
-  getUsers,
+export const getUserById = (id: string): O.Option<User> => pipe(
+  getUsers(rawUsers),
   A.filter(user => user.id === id),
   getOneOrNone,
 );
 
-export const getUserByUsernameAndPassword = (username: string, password: string) => pipe(
-  getUsers,
+export const getUserByUsernameAndPassword = (username: string, password: string): O.Option<User> => pipe(
+  getUsers(rawUsers),
   A.filter(user => user.username === username && user.password === password),
   getOneOrNone,
 );

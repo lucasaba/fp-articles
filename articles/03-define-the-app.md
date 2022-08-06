@@ -19,16 +19,17 @@ In his initial rappresentation, a meal has a customer, an order and a note. Our 
 ```json
 {
   "customer": {
-    "name": "Jack",
+    "username": "admin",
+    "password": "password"
   },
-  "items": [
+  "order": [
     {
       "food": "banana",
-      "quantity": 2,
+      "quantity": 2
     },
     {
       "food": "pie",
-      "quantity": 1,
+      "quantity": 1
     },
   ],
   "note": "Mind the gap!"
@@ -42,10 +43,102 @@ We'll require some validation:
 - the order must have at least one item
 - the quantity in the item must be a positive number
 - the food must be a "valid" food
-- "customer.name" is a string, is required and must be at least of two characters
-- note, if present, must be a string
+- "customer.username" is a string, is required and must be not empty
+- "customer.password" is a string, is required and must be not empty
+- note, if present, must be a non empty string
 
-We'll split our types in two side: dto and domain. DTOs, Data Transfer Object, will rappresent the outside, untrusted world. While domain are out internal, protected and affordable business logic.
+We'll split our types in two side: dto and domain. DTOs, Data Transfer Object, will rappresent the outside, untrusted world. While domain are our internal, safe and affordable business logic.
+
+## Users, customers and its repository
+
+Internally, our customers, must be a [User](../src/domain/User.ts). We'll define a User with few properties:
+
+```ts
+import * as t from 'io-ts';
+import { NonEmptyString } from 'io-ts-types';
+
+export const User = t.type({
+  id: NonEmptyString,
+  username: NonEmptyString,
+  password: NonEmptyString,
+});
+export type User = t.TypeOf<typeof User>;
+```
+
+The `const User` is a [codec](https://github.com/gcanti/io-ts/blob/master/docs/index.md) that is to say something that can encode an object in another object and vicecersa. We also define a `type`, thanks to the `TypeOf` defined in `io-ts` which will infer the type of our codec in order to be able to use it in our code.
+
+Let's see it in action in our [repository](../src/infra/user.repository.ts):
+
+```ts
+import { pipe } from "fp-ts/lib/function";
+import * as A from 'fp-ts/Array';
+import { User } from "../domain/User";
+import * as O from "fp-ts/lib/Option";
+
+const rawUsers = [
+  {
+    id: '1',
+    username: 'admin',
+    password: 'password'
+  }
+];
+
+export const getUsers = (data: any[]): User[] => pipe(
+  data,
+  A.map(user => User.decode(user)),
+  A.separate,
+  (t) => t.right
+);
+```
+
+We've got an array of users (rawUsers) and a function wich takes them, decode them, and removes the invalid ones. We'll add some tests to prove it but in the next chapter. But let's see what's going on the getUser function.
+
+- `getUsers` takes an array of anything
+- it maps every element of the array applying the decode function of the coder
+- it separates valid elements from invalid elements
+- it returns the valid one
+
+To do this, it uses some function offered by `fp-ts`. The `pipe` function takes, as first argument, the data to operate with and then, a series of function to be applied to the resulting elaboration. This means that data is passwed to `A.map(user => User.decode(user))`. The result of this map is then passed to `A.separate`. The result of the separate is passed to `(t) => t.right` and the result of this least function is returned outside the `getUsers` function.
+
+`A.map` is function that returns a function. It means that we could have written it in a less "functional" stule using it in this way:
+
+```ts
+export const getUsersUnfunctional = (data: any[]): User[] => {
+  const decoded = A.map(user => User.decode(user))(data);
+  const separated = A.separate(decoded);
+  return separated.right;
+}
+```
+
+So, in our function, it takes the data and applys the decoder. The decoder returns "either" a valid user or an error. It returns them in the form of an [Either](https://gcanti.github.io/fp-ts/modules/Either.ts.html). `Either` is an object which can be `Left` (conventionally meaning wrong) or `Right`. If it is `Left` it means that the provided data is not compliant with the type defined in the decoder. Otherwise it is ok.
+
+The returned array os `Either`s is then passed to the [Array.separate](https://gcanti.github.io/fp-ts/modules/Array.ts.html#separate) function. This creates a new array of arrays: it will contain an array of `Left` values and one of `Right` values.
+
+We can then return the array of `Right`s which is an array of correctly defined users.
+
+Since we'll use the to "authenticate" our customer, we define another function in the repository:
+
+```ts
+export const getUserByUsernameAndPassword = (username: string, password: string): O.Option<User> => pipe(
+  getUsers(rawUsers),
+  A.filter(user => user.username === username && user.password === password),
+  getOneOrNone,
+);
+
+const getOneOrNone = (items: any[]) => items.length > 0 ? O.some(items[0]) : O.none;
+```
+
+The `getUserByUsernameAndPassword` function returns an [Option](https://gcanti.github.io/fp-ts/modules/Option.ts.html). An Option, like an Either, has two possible values: `None` or `Some`. And that exactly wath `getUserByUsernameAndPassword` does: return a valid User or not.
+
+- it takes an array of valid `User`s
+- it filters those where username and password are equal to thise passed as argument
+- if at least one user is found it returns it, otherwise it returns a `None`
+
+We've done with the user/customer. Let's face our meal order.
+
+## Ordering the meal
+
+Internal and ex
 
 Since we don't like, at least I don't, to repeat ourselves we create a [BaseOrderItem](../src/domain/BaseOrderItem.ts) which will handle a basic definition of an item in the order array:
 

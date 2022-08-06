@@ -1,11 +1,11 @@
 import * as t from 'io-ts';
 import { nonEmptyArray, NonEmptyString } from 'io-ts-types';
-import { Customer } from './Customer';
 import { OrderItem } from './OrderItem';
+import { User } from './User';
 
 export const Meal = t.intersection([
   t.type({
-    customer: Customer,
+    user: User,
     items: nonEmptyArray(OrderItem),
   }),
   t.partial({
