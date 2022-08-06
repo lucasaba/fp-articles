@@ -4,7 +4,7 @@
   "main": "index.js",
   "license": "MIT",
   "scripts": {
-    "build": "tsc -p ./src",
+    "build": "tsc -p ./",
     "start": "node dist/server.js",
     "dev": "concurrently -k \"tsc --project tsconfig.json -w\" \"nodemon ./dist/server.js\""
   },
