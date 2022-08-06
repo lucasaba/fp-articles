@@ -66,7 +66,7 @@ it('should get the correct user by username and password', () => {
         username: 'admin',
         password: 'password'
       },
-    ];  
+    ];
     const users = getUsers(rawUsers);
     expect(users.length).toEqual(3);
 
@@ -143,4 +143,20 @@ Now we can start to refactor.
 
 ## Refactoring
 
+We are going to refactor the `app` in a much functional mode. To perform this, we're going to standardize errors e pipe everything together.
 
+What we're going to achieve is something like that;
+
+```ts
+app.post('/meal', (req, res) => {
+  return pipe(
+    req.body,
+    validateData,
+    getOrElse(badRequest('Invalid Meal'))
+    validatedUser,
+    getOrElse(unauthorized('Unauthorized'))
+    insertOrder,
+    getOrElse(internalServerError('Unable to insert order')),
+    created('Meal order accepted')
+  )
+```
