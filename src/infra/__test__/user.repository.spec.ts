@@ -49,7 +49,7 @@ describe('User repository', () => {
     const users = getUsers(rawUsers);
     expect(users.length).toEqual(3);
 
-    const authenticated = getUserByUsernameAndPassword('admin', 'password');
+    const authenticated = getUserByUsernameAndPassword('admin', 'password', rawUsers);
     expect(authenticated._tag).toEqual('Some');
     if (authenticated._tag === 'Some') {
       expect(authenticated.value.id).toEqual(rawUsers[2].id);
