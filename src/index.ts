@@ -28,7 +28,7 @@ app.post('/meal', (req, res) => {
     return;
   }
 
-  res.send('Meal accepted');
+  res.status(201).send('Meal order accepted');
 });
 
 app.listen(port, () => {

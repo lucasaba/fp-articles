@@ -1,5 +1,8 @@
 import * as t from 'io-ts';
-import { BaseOrderItem } from '../domain/BaseOrderItem';
+import { PositiveInteger } from '../domain/utils/PositiveInteger';
 
-export const OrderItemDto = BaseOrderItem;
+export const OrderItemDto = t.type({
+  food: t.union([t.literal('banana'), t.literal('pie'), t.literal('carrot')]),
+  quantity: PositiveInteger,
+});
 export type OrderItemDto = t.TypeOf<typeof OrderItemDto>;

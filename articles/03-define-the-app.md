@@ -138,47 +138,21 @@ We've done with the user/customer. Let's face our meal order.
 
 ## Ordering the meal
 
-Internal and ex
-
-Since we don't like, at least I don't, to repeat ourselves we create a [BaseOrderItem](../src/domain/BaseOrderItem.ts) which will handle a basic definition of an item in the order array:
+Let's start with our meal. The meal order will contain an array of [OrderItemDto](../src/dto/OrderItemDto.ts):
 
 ```ts
 import * as t from 'io-ts';
 
-export const BaseOrderItem = t.type({
+export const OrderItemDto = t.type({
   food: t.union([t.literal('banana'), t.literal('pie'), t.literal('carrot')]),
-  quantity: t.number,
+  quantity: PositiveInteger,
 });
-export type BaseOrderItem = t.TypeOf<typeof BaseOrderItem>;
-```
-
-As you can see, we already have a check on the allowed food but we still don't have any control over the `quantity`.
-
-This BaseOrderItem type, is then copied from the [OrderItemDto](../src/dto/OrderItemDto.ts):
-
-```ts
-import * as t from 'io-ts';
-import { BaseOrderItem } from '../domain/BaseOrderItem';
-
-export const OrderItemDto = BaseOrderItem;
 export type OrderItemDto = t.TypeOf<typeof OrderItemDto>;
 ```
 
-Last but not least, we define our domain rappresentation of an [OrderItem](../src/domain/OrderItem.ts). We'll use a specil type, a [branded type](https://github.com/gcanti/io-ts/blob/master/index.md#branded-types--refinements), to define positive integers:
+This should be straightforward: a quantity is a positive integer and a food must be a valid string. Valid string for food are "banana", "pie" and "carrot".
 
-```ts
-import * as t from 'io-ts';
-import { PositiveInteger } from './utils/PositiveInteger';
-import { BaseOrderItem } from './BaseOrderItem';
-
-export const OrderItem = t.intersection([
-  BaseOrderItem,
-  t.type ({ quantity: PositiveInteger}),
-]);
-export type OrderItem = t.TypeOf<typeof OrderItem>;
-```
-
-So an OrderItem, in our domain, is a BaseOrderItem where `quantity` is a positive integer. We'll prove this in the next chapter, where we'll start testing our code. Now we can show how it looks like this branded type:
+As we mentioned before, `quantity` must be a positive integer. TO do this, we use a special type: a [branded type](https://github.com/gcanti/io-ts/blob/master/index.md#branded-types--refinements). Here's how we define it:
 
 ```ts
 import * as t from 'io-ts';
@@ -196,51 +170,77 @@ export const PositiveInteger = t.brand(
 type PositiveInteger = t.TypeOf<typeof PositiveInteger>
 ```
 
-A branded type has a codec (we'll explain this later), a refinement function and a name. Basically we are sayng that a PositiveInteger is an `Int` codec but it is only valid id the number is greater than 0 (`n >= 0`).
+A branded type has a codec (we've seen it before), a refinement function and a name. Basically we are sayng that a PositiveInteger is an `Int` codec but it is only valid id the number is greater than 0 (`n >= 0`).
 
-`Customer` is quite easy. We'll duplicate it in domain and DTO. In domain we'll use the `NonEmptyString` type from `io-ts-types`. In this case, I prefere to duplicate in order to have a clear separation between the meening of o Customer in our domain and that in the outside world.
+We want only legitimate users to order meal: in order to know if the user is legitimate we'll send the username and password in our order. We'll pass this data in a [CustomerDto](../src/dto/CustomerDto.ts) type.
 
-We can now define a [Meal](../src/domain/Meal.ts):
+Last but not least, we can now define a [MealDto](../src/dto/MealDto.ts):
 
 ```ts
 import * as t from 'io-ts';
 import { nonEmptyArray, NonEmptyString } from 'io-ts-types';
-import { Customer } from './Customer';
-import { OrderItem } from './OrderItem';
+import { CustomerDto } from './CustomerDto';
+import { OrderItemDto } from './OrderItemDto';
 
-export const Meal = t.intersection([
+export const MealDto = t.intersection([
   t.type({
-    customer: Customer,
-    items: nonEmptyArray(OrderItem),
+    customer: CustomerDto,
+    order: nonEmptyArray(OrderItemDto),
   }),
   t.partial({
     note: NonEmptyString,
   })
 ]);
-export type Meal = t.TypeOf<typeof Meal>;
+export type MealDto = t.TypeOf<typeof MealDto>;
 ```
 
-Here we use an `intersaction` with a `partial`: so we define an optional field. We also use another element from `io-ts-types`: a non empty array which should be self explanatory.
+Here we use an `intersection` with a `partial`: so we define an optional field. We also use two elements from `io-ts-types`: a non empty array and a NonEmptyString which should be self explanatory.... by the way, they are branded types.
 
-The DTO, will be similar but with less checks:
+## Update the application
 
-...
-
-Now let's use everything and see how they works:
+Now, we'll pack everything together and start playing with our meal ordering app. We'll add a new route:
 
 ```ts
 // index.ts
 app.post('/meal', (req, res) => {
-  const data = Meal.decode(req.body);
+  const data = MealDto.decode(req.body);
+
   if (data._tag === 'Left') {
     res.status(400).send('Invalid Meal');
-  } else {
-    res.send('Meal accepted');
+    return;
   }
+
+  const user = getUserByUsernameAndPassword(
+    data.right.customer.username,
+    data.right.customer.password,
+  );
+
+  if (user._tag === 'None') {
+    res.status(403).send('Unauthorized');
+    return;
+  }
+
+  res.status(201).send('Meal order accepted');
 });
 ```
 
-We've defined a new route `/meal` and we use the Meal codec to validate our data. A `codec` returns either a `Left` or a `Right` tagged type. By convention, if the type is Left, something bad has happened. If it is Rigth, everythin is ok.
+We've defined a new route `/meal` and we use the MealDto codec to validate our data. As we already know the `codec` returns either a `Left` or a `Right` tagged type and, by convention, if the type is Left, something bad has happened while if it is Rigth, everythin is ok.
+
+If data is Left, we send back an HTTP 400 response. 
+
+If data is Right, note that we already know that the meal is good:
+
+- order contains a non empty array of items
+- each item has only valid food
+- each item has a positivie integer quantity
+- if there's a note, it is a non empty string
+- we have non empty string username and password
+
+The next step is authenticating our user. We call `getUserByUsernameAndPassword` passing username and password of our customer. If we received a `None` value, the user was not found and thus we return an HTTP 403 response.
+
+If the user is found, we take the meal order and return an HTTP 201 response.
+
+## Let's try it
 
 You can try this sending somw wrong data:
 
@@ -252,7 +252,31 @@ curl --location --request POST 'http://localhost:3000/meal' \
 }'
 ```
 
-Response will be `Invalid meal`. You can try with a valid meal and see what happen.
+Response will be `Invalid meal`.
 
-See you in next chapter to start testing.
+When the meal is valid but not the user:
+
+```bash
+curl --location --request POST 'http://localhost:3000/meal' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "customer": {
+        "username": "nonuser",
+        "password": "nonuser"
+    },
+    "order": [
+        {
+            "food": "pie",
+            "quantity": 1
+        }
+    ],
+    "note": "aaa"
+}'
+```
+
+the response will be `Unauthorized`
+
+## End of chapter
+
+In next chapter we'll start testing our code and refactor our route in order to have some more meaningfull error message and to have a mor functional way of handling data.
 
