@@ -276,7 +276,7 @@ curl --location --request POST 'http://localhost:3000/meal' \
 
 the response will be `Unauthorized`
 
-## End of chapter
+## End of chapter 3
 
 In next chapter we'll start testing our code and refactor our route in order to have some more meaningfull error message and to have a mor functional way of handling data.
 
